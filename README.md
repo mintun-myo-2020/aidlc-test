@@ -11,7 +11,7 @@ npm test
 
 Config (env): `PORT`, `DB_PATH` (default `data/social.db`), `RATE_LIMIT_WRITES` (10), `RATE_LIMIT_WINDOW_MS` (60000), `TRUST_PROXY=1` (honour X-Forwarded-For).
 
-Limits: post 500 chars, comment 280, display name 30 (blank = "Anonymous"), feed 20/page newest first.
+Limits: post 500 chars, comment 300, display name 30 (blank = "Anonymous"), feed 20/page newest first.
 
 ## Routes
 HTML: `GET /`, `GET /posts/:id`, `POST /posts`, `POST /posts/:id/comments`.

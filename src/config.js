@@ -12,7 +12,7 @@ const intFromEnv = (name, fallback) => {
 
 export const LIMITS = Object.freeze({
   postMaxChars: 500,
-  commentMaxChars: 280,
+  commentMaxChars: 300,
   displayNameMaxChars: 30,
   pageSize: 20,
   bodyMaxBytes: 16 * 1024,

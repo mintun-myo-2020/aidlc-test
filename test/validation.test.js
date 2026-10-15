@@ -19,9 +19,9 @@ test('post: rejects display name over 30 chars', () => {
   assert.equal(result.errors[0].field, 'displayName');
 });
 
-test('comment: enforces 280 char limit', () => {
-  assert.equal(validateComment({ body: 'a'.repeat(280) }).ok, true);
-  assert.equal(validateComment({ body: 'a'.repeat(281) }).ok, false);
+test('comment: enforces 300 char limit', () => {
+  assert.equal(validateComment({ body: 'a'.repeat(300) }).ok, true);
+  assert.equal(validateComment({ body: 'a'.repeat(301) }).ok, false);
 });
 
 test('non-string input is treated as empty', () => {
