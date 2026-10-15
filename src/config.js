@@ -24,7 +24,7 @@ export function loadConfig() {
   return {
     port: intFromEnv('PORT', 3000),
     dbPath: process.env.DB_PATH || 'data/social.db',
-    rateLimitWrites: intFromEnv('RATE_LIMIT_WRITES', 5),
+    rateLimitWrites: intFromEnv('RATE_LIMIT_WRITES', 10),
     rateLimitWindowMs: intFromEnv('RATE_LIMIT_WINDOW_MS', 60_000),
     // Only enable behind a reverse proxy you control; otherwise X-Forwarded-For is spoofable.
     trustProxy: process.env.TRUST_PROXY === '1',
