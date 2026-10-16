@@ -57,17 +57,26 @@ const parseId = (value) => (/^\d{1,15}$/.test(value) ? Number(value) : null);
 export function createApp({ store, limiter, trustProxy = false, log = console }) {
   const clientKey = (req) => {
     const forwarded = trustProxy ? req.headers['x-forwarded-for'] : undefined;
-    return (forwarded ? String(forwarded).split(',')[0].trim() : req.socket.remoteAddress) ?? 'unknown';
+    // The rightmost entry is the one appended by our own trusted proxy; earlier entries are client-supplied.
+    return (forwarded ? String(forwarded).split(',').at(-1).trim() : req.socket.remoteAddress) ?? 'unknown';
   };
 
-  function enforceRateLimit(req) {
+  /** Consumes one write token. Runs before validation on purpose: invalid submissions also count as abuse. */
+  function checkRateLimit(req) {
     const result = limiter.consume(clientKey(req));
-    if (!result.allowed) {
-      throw new HttpError(429, 'RATE_LIMITED', 'Too many submissions. Please wait and try again.', {
-        retryAfter: result.retryAfterSeconds,
-      });
-    }
+    if (result.allowed) return null;
+    return new HttpError(429, 'RATE_LIMITED', 'Too many submissions. Please wait and try again.', {
+      retryAfter: result.retryAfterSeconds,
+    });
   }
+
+  function enforceRateLimit(req) {
+    const limited = checkRateLimit(req);
+    if (limited) throw limited;
+  }
+
+  const rateLimitedHeaders = (err) => ({ 'retry-after': String(err.details.retryAfter) });
+  const rateLimitedForm = (err) => [{ field: 'body', reason: err.message }];
 
   const needPost = (id) => {
     const post = id === null ? null : store.getPost(id);
@@ -109,8 +118,13 @@ export function createApp({ store, limiter, trustProxy = false, log = console })
       sendHtml(res, 200, renderPost({ post, comments: store.listComments(post.id) }));
     },
     async submitPost(req, res) {
-      enforceRateLimit(req);
+      const limited = checkRateLimit(req);
       const input = await readBody(req);
+      if (limited) {
+        const page = store.listPosts({ page: 1, pageSize: LIMITS.pageSize });
+        const formState = { values: input, errors: rateLimitedForm(limited) };
+        return sendHtml(res, 429, renderFeed({ ...page, page: 1, formState }), rateLimitedHeaders(limited));
+      }
       const checked = validatePost(input);
       if (!checked.ok) {
         const page = store.listPosts({ page: 1, pageSize: LIMITS.pageSize });
@@ -120,9 +134,13 @@ export function createApp({ store, limiter, trustProxy = false, log = console })
       send(res, 303, 'text/plain', '', { location: `/posts/${post.id}` });
     },
     async submitComment(req, res, id) {
-      enforceRateLimit(req);
+      const limited = checkRateLimit(req);
       const post = needPost(id);
       const input = await readBody(req);
+      if (limited) {
+        const formState = { values: input, errors: rateLimitedForm(limited) };
+        return sendHtml(res, 429, renderPost({ post, comments: store.listComments(id), formState }), rateLimitedHeaders(limited));
+      }
       const checked = validateComment(input);
       if (!checked.ok) {
         const formState = { values: input, errors: checked.errors };
@@ -169,7 +187,7 @@ export function createApp({ store, limiter, trustProxy = false, log = console })
     if (!known) log.error('Unhandled error', err);
     const status = known ? err.status : 500;
     const message = known ? err.message : 'Something went wrong.';
-    const headers = err.code === 'RATE_LIMITED' ? { 'retry-after': String(err.details.retryAfter) } : {};
+    const headers = err.code === 'RATE_LIMITED' ? rateLimitedHeaders(err) : {};
     if (isApi) {
       const body = { error: { code: known ? err.code : 'INTERNAL', message, details: known && Array.isArray(err.details) ? err.details : undefined } };
       return sendJson(res, status, body, headers);

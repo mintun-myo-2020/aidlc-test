@@ -67,8 +67,9 @@ export function createStore(dbPath, now = () => new Date()) {
     /** Returns null when the post does not exist. */
     createComment({ postId, displayName, body }) {
       if (!selectPost.get(postId)) return null;
-      const result = insertComment.run(postId, displayName, body, now().toISOString());
-      return { id: Number(result.lastInsertRowid), postId, displayName, body };
+      const createdAt = now().toISOString();
+      const result = insertComment.run(postId, displayName, body, createdAt);
+      return { id: Number(result.lastInsertRowid), postId, displayName, body, createdAt };
     },
 
     /** Fetches one extra row to learn whether a next page exists. */

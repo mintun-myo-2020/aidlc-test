@@ -92,3 +92,54 @@ test('oversized body is rejected', async () => {
   const res = await postJson('/api/posts', { body: 'a'.repeat(20_000) });
   assert.equal(res.status, 413);
 });
+
+test('rate-limited HTML submission keeps the typed text and returns 429', async () => {
+  const limited = createServer(createApp({
+    store: createStore(':memory:'), limiter: createRateLimiter({ limit: 1, windowMs: 60_000 }), log: { error() {} },
+  }));
+  await new Promise((resolve) => limited.listen(0, resolve));
+  const url = `http://127.0.0.1:${limited.address().port}`;
+  const submit = (text) => fetch(`${url}/posts`, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: `body=${text}`,
+  });
+  assert.equal((await submit('first')).status, 303);
+  const blocked = await submit('keep+me');
+  assert.equal(blocked.status, 429);
+  assert.ok(blocked.headers.get('retry-after'));
+  assert.ok((await blocked.text()).includes('keep me'));
+  limited.close();
+});
+
+test('TRUST_PROXY uses the rightmost X-Forwarded-For entry, so spoofed leftmost values do not bypass the limit', async () => {
+  const proxied = createServer(createApp({
+    store: createStore(':memory:'), limiter: createRateLimiter({ limit: 1, windowMs: 60_000 }),
+    trustProxy: true, log: { error() {} },
+  }));
+  await new Promise((resolve) => proxied.listen(0, resolve));
+  const url = `http://127.0.0.1:${proxied.address().port}`;
+  const send = (spoofed) => fetch(`${url}/api/posts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forwarded-for': `${spoofed}, 203.0.113.9` },
+    body: '{"body":"x"}',
+  });
+  assert.equal((await send('1.1.1.1')).status, 201);
+  assert.equal((await send('2.2.2.2')).status, 429);
+  proxied.close();
+});
+
+test('forms are labelled, keyboard-friendly and the page is responsive', async () => {
+  const post = await (await postJson('/api/posts', { body: 'a11y' })).json();
+  for (const html of [await (await fetch(`${base}/`)).text(), await (await fetch(`${base}/posts/${post.id}`)).text()]) {
+    assert.match(html, /<meta name="viewport"/);
+    assert.match(html, /<label for="(post|comment)-body">/);
+    assert.match(html, /<label for="(post|comment)-name">/);
+    assert.match(html, /data-testid="(post|comment)-submit-button"/);
+  }
+});
+
+test('comment API response includes createdAt', async () => {
+  const post = await (await postJson('/api/posts', { body: 'p' })).json();
+  const comment = await (await postJson(`/api/posts/${post.id}/comments`, { body: 'c' })).json();
+  assert.ok(comment.createdAt);
+});

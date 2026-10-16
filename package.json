@@ -4,9 +4,13 @@
   "private": true,
   "description": "Text-only, no-login social platform POC: anonymous posts and flat comments.",
   "type": "module",
-  "engines": { "node": ">=22.5" },
+  "engines": { "node": ">=22.13" },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0"
   }
 }
